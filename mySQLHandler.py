@@ -94,32 +94,53 @@ class mySQLHandler(logging.Handler):
         logging.Handler.__init__(self)
         self.db = db
         # Try to connect to DB
+
+        # Check if 'log' table in db already exists
+        result = self.checkTablePresence()
+        # If not exists, then create the table
+        if not result:
+            try:
+                conn=MySQLdb.connect(host=self.db['host'],port=self.db['port'],user=self.db['dbuser'],passwd=self.db['dbpassword'],db=self.db['dbname'])
+            except _mysql_exceptions, e:
+                raise Exception(e)
+                exit(-1)
+            else:         
+                cur = conn.cursor()
+                try:
+                    cur.execute(mySQLHandler.initial_sql)
+                except _mysql_exceptions as e:
+                    conn.rollback()
+                    cur.close()
+                    conn.close()
+                    raise Exception(e)
+                    exit(-1)
+                else:
+                    conn.commit()
+                finally:
+                    cur.close()
+                    conn.close()
+        
+    def checkTablePresence(self):
         try:
             conn=MySQLdb.connect(host=self.db['host'],port=self.db['port'],user=self.db['dbuser'],passwd=self.db['dbpassword'],db=self.db['dbname'])
         except _mysql_exceptions, e:
             raise Exception(e)
             exit(-1)
-        # Check if 'log' table in db already exists
-        cur = conn.cursor()
-        stmt = "SHOW TABLES LIKE 'log';"
-        cur.execute(stmt)
-        result = cur.fetchone()
-        cur.close()
-        # If not exists, then create the table
-        if not result:
+        else:
+            # Check if 'log' table in db already exists
             cur = conn.cursor()
-            try:
-                cur.execute(mySQLHandler.initial_sql)
-                conn.commit()
-            except _mysql_exceptions, e:
-                conn.rollback()
-                cur.close()
-                conn.close()
-                raise Exception(e)
-                exit(-1)
-
-        cur.close()
-        conn.close()
+            stmt = "SHOW TABLES LIKE 'log';"
+            cur.execute(stmt)
+            result = cur.fetchone()
+            cur.close()
+            conn.close()
+        
+        if not result:
+            return 0
+        else:
+            return 1
+    def createTableLog(self):
+        pass
         
     def formatDBTime(self, record):
         """
@@ -148,21 +169,49 @@ class mySQLHandler(logging.Handler):
         try:
             conn=MySQLdb.connect(host=self.db['host'],port=self.db['port'],user=self.db['dbuser'],passwd=self.db['dbpassword'],db=self.db['dbname'])
         except _mysql_exceptions, e:
+            from pprint import pprint
+            print("The Exception during db.connect")           
+            pprint(e)
             raise Exception(e)
             exit(-1)
         cur = conn.cursor()
         try:
             cur.execute(sql)
-            conn.commit()
+        except _mysql_exceptions.ProgrammingError as e:
+            errno, errstr = e.args
+            if not errno == 1146:
+                raise
+            cur.close() # close current cursor
+            cur = conn.cursor() # recreate it (is it mandatory?)
+            try:            # try to recreate table
+                cur.execute(mySQLHandler.initial_sql)
+        
+            except _mysql_exceptions as e:
+                # definitly can't work...
+                conn.rollback()
+                cur.close()
+                conn.close()
+                raise Exception(e)
+                exit(-1)
+            else:   # if recreate log table is ok
+                conn.commit()                  
+                cur.close()
+                cur = conn.cursor()
+                cur.execute(sql)
+                conn.commit()
+                # then Exception vanished
+                    
         except _mysql_exceptions, e:
             conn.rollback()
             cur.close()
             conn.close()
             raise Exception(e)
             exit(-1)
-
-        cur.close()
-        conn.close()
+        else:
+            conn.commit()
+        finally:
+            cur.close()
+            conn.close()
         
 def main():
     def print_all_log(oLog):
