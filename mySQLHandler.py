@@ -164,6 +164,15 @@ class mySQLHandler(logging.Handler):
             record.exc_text = logging._defaultFormatter.formatException(record.exc_info)
         else:
             record.exc_text = ""
+
+        # Replace single quotes in messages
+        if isinstance(record.__dict__['message'], str):
+            record.__dict__['message'] = record.__dict__['message'].replace("'", "''")
+
+        if isinstance(record.__dict__['msg'], str):
+            record.__dict__['msg'] = record.__dict__['msg'].replace("'", "''")
+
+
         # Insert log record:
         sql = mySQLHandler.insertion_sql % record.__dict__
         try:
