@@ -7,6 +7,7 @@ import MySQLdb
 import _mysql_exceptions
 import logging
 import time
+import six
  
 class mySQLHandler(logging.Handler):
     """
@@ -174,7 +175,6 @@ class mySQLHandler(logging.Handler):
 
 
         # Insert log record:
-        sql = mySQLHandler.insertion_sql % record.__dict__
         try:
             conn=MySQLdb.connect(host=self.db['host'],port=self.db['port'],user=self.db['dbuser'],passwd=self.db['dbpassword'],db=self.db['dbname'])
         except _mysql_exceptions, e:
@@ -183,6 +183,10 @@ class mySQLHandler(logging.Handler):
             pprint(e)
             raise Exception(e)
             exit(-1)
+        # escape the message to allow for SQL special chars
+        if isinstance(record.msg, six.string_types):# check is a string
+          record.msg=conn.escape_string(record.msg)
+        sql = mySQLHandler.insertion_sql % record.__dict__
         cur = conn.cursor()
         try:
             cur.execute(sql)
